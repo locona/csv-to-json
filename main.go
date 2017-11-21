@@ -1,68 +1,62 @@
 package main
 
 import (
-	"os"
 	"encoding/csv"
 	"encoding/json"
 	"flag"
-	"strings"
 	"fmt"
+	"os"
+	"strings"
 )
 
-// Returns a handle to an existing file
-func getInfile(filename string) *os.File {
-	f, err := os.Open(filename)
-	check(err)
-	return f
-}
-
-// Returns a handle to a new file
-func getOutfile(filename string) *os.File {
-	f, err := os.Create(filename)
-	check(err)
-	return f
-}
-
 func writeJSON(infile, outfile *os.File) {
-	rd := csv.NewReader(infile)
-	rd.LazyQuotes = true
-	wr := json.NewEncoder(outfile)
-	arr := make([]map[string]string, 0)
-	var vals []string;
-	keys, rderr := rd.Read()
-	check(rderr)
-	for rderr == nil {
-		vals, rderr = rd.Read()
-		if len(vals) < len(keys) {
-			continue;
+	reader := csv.NewReader(infile)
+	reader.LazyQuotes = true
+	keys, err := reader.Read()
+	if err != nil {
+		panic(err)
+	}
+
+	arr := make([]map[string]interface{}, 0)
+	for {
+		record, err := reader.Read()
+		if err != nil {
+			fmt.Println(err)
+			break
 		}
-		vmap := make(map[string]string)
-		for idx, key := range keys {
-			vmap[key] = vals[idx]
+		if len(record) < len(keys) {
+			continue
+		}
+
+		vmap := make(map[string]interface{})
+		for idx := range keys {
+			vmap[keys[idx]] = record[idx]
 		}
 		arr = append(arr, vmap)
 	}
-	wr.Encode(arr)
-	fmt.Printf("Wrote %d JSON records\n", len(arr))
-}
 
-// Yikes
-func check(e error) {
-    if e != nil {
-        panic(e)
-    }
+	wr := json.NewEncoder(outfile)
+	if err := wr.Encode(arr); err != nil {
+		panic(err)
+	}
+	fmt.Printf("Wrote %d JSON records\n", len(arr))
 }
 
 func main() {
 	flag.Parse()
-	infname := flag.Arg(0)
-	// Output file name
-	var outfname = strings.Replace(infname, ".csv", ".json", 1)
-	infile := getInfile(infname)
-	defer infile.Close()
-	outfile := getOutfile(outfname)
-	defer outfile.Close()
-	writeJSON(infile, outfile)
+	csvFileName := flag.Arg(0)
+	jsonFileName := strings.Replace(csvFileName, ".csv", ".json", 1)
+	csvF, err := os.Open(csvFileName)
+	defer csvF.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	jsonF, err := os.Create(jsonFileName)
+	defer jsonF.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	writeJSON(csvF, jsonF)
 }
-
-
